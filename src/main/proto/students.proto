@@ -1,0 +1,32 @@
+syntax = "proto3";
+option java_multiple_files = true;
+package com.johnp.grpc;
+import "google/protobuf/timestamp.proto";
+
+message StudentProfileRequest {
+  float student_id = 1;
+}
+
+message StudentProfileResponse {
+  float student_id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string email = 4;
+  string program = 5;
+  int32 current_semester = 6;
+  double gpa = 7;
+  google.protobuf.Timestamp enrollment_date = 8;
+  repeated EnrolledCourse enrolled_courses = 9;
+}
+
+message EnrolledCourse {
+  string course_id = 1;
+  string course_name = 2;
+  string term = 3;
+  string status = 4;
+  double grade = 5;
+}
+
+service StudentsService {
+  rpc getStudentProfile (StudentProfileRequest) returns (StudentProfileResponse);
+}
