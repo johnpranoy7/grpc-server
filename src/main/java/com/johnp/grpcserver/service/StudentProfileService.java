@@ -41,6 +41,7 @@ public class StudentProfileService {
         return courseRepository.findAll();
     }
 
+    @Transactional
     public void insertEnrollment(StudentEnrollmentRequest enrollmentRequest) throws Exception {
 
         boolean isStudentPresent = studentRepository.findById(enrollmentRequest.getStudentId()).isPresent();

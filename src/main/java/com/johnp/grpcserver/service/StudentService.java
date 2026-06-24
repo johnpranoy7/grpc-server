@@ -99,9 +99,11 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
                     studentProfileService.insertEnrollment(studentEnrollmentRequest);
                     successCnt[0]++;
                 } catch (Exception e) {
-                    System.err.println("Error occurred while inserting enrollment: " + e.getMessage());
+                    System.err.println("Error occurred while inserting enrollment for student "
+                            + studentEnrollmentRequest.getStudentId() + ", course "
+                            + studentEnrollmentRequest.getCourseId() + ": " + e.getMessage());
                     failedCnt[0]++;
-                    failedRecordIds.add(String.valueOf(studentEnrollmentRequest.getStudentId()));
+                    failedRecordIds.add(studentEnrollmentRequest.getStudentId() + ":" + studentEnrollmentRequest.getCourseId());
                 }
             }
 
@@ -113,12 +115,13 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
 
             @Override
             public void onCompleted() {
-                // Send the final response with the count of successful and failed enrollments
                 BatchEnrollStudentsResponse response = BatchEnrollStudentsResponse.newBuilder()
                         .setSuccessCount(successCnt[0])
                         .setFailureCount(failedCnt[0])
                         .addAllFailedStudentIds(failedRecordIds)
                         .build();
+                System.out.println("Batch enrollment finished. Success=" + successCnt[0]
+                        + ", Failed=" + failedCnt[0]);
                 responseObserver.onNext(response);
                 responseObserver.onCompleted();
             }

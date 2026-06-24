@@ -14,10 +14,11 @@ INSERT INTO students (student_id, first_name, last_name, email, program, current
 (4, 'Bob', 'Brown', 'bobBrown@email.com', 'Mathematics', 1, 3.6, '2023-04-25');
 
 -- Enrollments link students to courses (student_id + course_id FKs)
-INSERT INTO enrollments (enrollment_id, student_id, course_id, term, status, grade) VALUES
-(1, 1, 1, 'Fall 2022', 'Enrolled', 3.5),
-(2, 1, 2, 'Spring 2023', 'Enrolled', 3.8),
-(3, 2, 3, 'Summer 2023', 'Enrolled', 3.2),
-(4, 2, 4, 'Fall 2023', 'Enrolled', 3.6),
-(5, 3, 5, 'Spring 2024', 'Enrolled', 3.9),
-(6, 3, 1, 'Spring 2024', 'Enrolled', 4.0);
+-- Do not set enrollment_id here; IDENTITY will assign 1..6, then new inserts continue from 7
+INSERT INTO enrollments (student_id, course_id, term, status, grade) VALUES
+(1, 1, 'Fall 2022', 'Enrolled', 3.5),
+(1, 2, 'Spring 2023', 'Enrolled', 3.8),
+(2, 3, 'Summer 2023', 'Enrolled', 3.2),
+(2, 4, 'Fall 2023', 'Enrolled', 3.6),
+(3, 5, 'Spring 2024', 'Enrolled', 3.9),
+(3, 1, 'Spring 2024', 'Enrolled', 4.0);
