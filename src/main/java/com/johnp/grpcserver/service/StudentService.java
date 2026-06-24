@@ -2,11 +2,7 @@ package com.johnp.grpcserver.service;
 
 import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
-import com.johnp.grpc.CourseSummary;
-import com.johnp.grpc.EnrolledCourse;
-import com.johnp.grpc.StudentProfileRequest;
-import com.johnp.grpc.StudentProfileResponse;
-import com.johnp.grpc.StudentsServiceGrpc;
+import com.johnp.grpc.*;
 import com.johnp.grpcserver.bean.Course;
 import com.johnp.grpcserver.bean.Enrollment;
 import com.johnp.grpcserver.bean.Student;
@@ -17,9 +13,9 @@ import org.springframework.grpc.server.service.GrpcService;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Timer;
 import java.util.concurrent.TimeUnit;
 
 @GrpcService
@@ -68,10 +64,10 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
         try {
             List<Course> allCourses = studentProfileService.getAllCourses();
             allCourses.forEach(course -> {
-                CourseSummary courseSummary = CourseSummary.newBuilder().setCourseId(String.valueOf(course.getCourseId()))
+                CourseSummary courseSummary = CourseSummary.newBuilder().setCourseId(course.getCourseId())
                         .setCourseName(nullToEmpty(course.getCourseName()))
                         .setCourseCode(nullToEmpty(course.getCourseCode()))
-                        .setCredits(String.valueOf((int) course.getCredits()))
+                        .setCredits(String.valueOf(course.getCredits()))
                         .build();
                 try {
                     TimeUnit.SECONDS.sleep(4);
@@ -86,6 +82,51 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
         }
     }
 
+    @Override
+    public StreamObserver<StudentEnrollmentRequest> batchConsumeEnrollStudents(
+            StreamObserver<BatchEnrollStudentsResponse> responseObserver) {
+        final int[] successCnt = {0};
+        final int[] failedCnt = { 0 };
+        ArrayList<String> failedRecordIds = new ArrayList<>();
+
+        return new StreamObserver<StudentEnrollmentRequest>() {
+            @Override
+            public void onNext(StudentEnrollmentRequest studentEnrollmentRequest) {
+                // Process each StudentEnrollmentRequest
+                System.out.println("Received enrollment request for student ID: " + studentEnrollmentRequest.getStudentId());
+                // Here you can add logic to save the enrollment request to the database or perform other operations
+                try {
+                    studentProfileService.insertEnrollment(studentEnrollmentRequest);
+                    successCnt[0]++;
+                } catch (Exception e) {
+                    System.err.println("Error occurred while inserting enrollment: " + e.getMessage());
+                    failedCnt[0]++;
+                    failedRecordIds.add(String.valueOf(studentEnrollmentRequest.getStudentId()));
+                }
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                System.err.println("Error occurred in batch enrollment stream: " + throwable.getMessage());
+                responseObserver.onError(throwable);
+            }
+
+            @Override
+            public void onCompleted() {
+                // Send the final response with the count of successful and failed enrollments
+                BatchEnrollStudentsResponse response = BatchEnrollStudentsResponse.newBuilder()
+                        .setSuccessCount(successCnt[0])
+                        .setFailureCount(failedCnt[0])
+                        .addAllFailedStudentIds(failedRecordIds)
+                        .build();
+                responseObserver.onNext(response);
+                responseObserver.onCompleted();
+            }
+        };
+    }
+
+
+
     private List<EnrolledCourse> toEnrolledCourses(Student student) {
         if (student.getEnrollments() == null) {
             return Collections.emptyList();
@@ -98,11 +139,11 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
 
     private EnrolledCourse toEnrolledCourse(Enrollment enrollment) {
         return EnrolledCourse.newBuilder()
-                .setCourseId(String.valueOf(enrollment.getCourse().getCourseId()))
+                .setCourseId(enrollment.getCourse().getCourseId())
                 .setCourseName(nullToEmpty(enrollment.getCourse().getCourseName()))
                 .setTerm(nullToEmpty(enrollment.getTerm()))
                 .setStatus(nullToEmpty(enrollment.getStatus()))
-                .setGrade(enrollment.getGrade())
+                .setGrade((float) enrollment.getGrade())
                 .build();
     }
 

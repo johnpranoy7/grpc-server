@@ -13,7 +13,7 @@ public class Student {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     @Column(name = "student_id", unique = true, nullable = false)
-    private float studentId;
+    private Long studentId;
 
     @Column(name = "first_name")
     private String firstName;

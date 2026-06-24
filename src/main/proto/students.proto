@@ -5,11 +5,11 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 
 message StudentProfileRequest {
-  float student_id = 1;
+  int64 student_id = 1;
 }
 
 message StudentProfileResponse {
-  float student_id = 1;
+  int64 student_id = 1;
   string first_name = 2;
   string last_name = 3;
   string email = 4;
@@ -21,21 +21,36 @@ message StudentProfileResponse {
 }
 
 message EnrolledCourse {
-  string course_id = 1;
+  int64 course_id = 1;
   string course_name = 2;
   string term = 3;
   string status = 4;
-  double grade = 5;
+  float grade = 5;
 }
 
 message CourseSummary {
-  string course_id = 1;
+  int64 course_id = 1;
   string course_name = 2;
   string course_code = 3;
   string credits = 4;
 }
 
+message StudentEnrollmentRequest {
+  int64 student_id = 1;
+  int64 course_id = 2;
+  string term = 4;
+  string status = 5;
+  double grade = 6;
+}
+
+message BatchEnrollStudentsResponse {
+  int32 success_count = 1;
+  int32 failure_count = 2;
+  repeated string failed_student_ids = 3;
+}
+
 service StudentsService {
   rpc getStudentProfile (StudentProfileRequest) returns (StudentProfileResponse);
   rpc streamCourseCatalog (google.protobuf.Empty) returns (stream CourseSummary);
+  rpc batchConsumeEnrollStudents (stream StudentEnrollmentRequest) returns (BatchEnrollStudentsResponse);
 }
