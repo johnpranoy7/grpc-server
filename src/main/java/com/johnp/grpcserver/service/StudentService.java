@@ -1,10 +1,13 @@
 package com.johnp.grpcserver.service;
 
+import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
+import com.johnp.grpc.CourseSummary;
 import com.johnp.grpc.EnrolledCourse;
 import com.johnp.grpc.StudentProfileRequest;
 import com.johnp.grpc.StudentProfileResponse;
 import com.johnp.grpc.StudentsServiceGrpc;
+import com.johnp.grpcserver.bean.Course;
 import com.johnp.grpcserver.bean.Enrollment;
 import com.johnp.grpcserver.bean.Student;
 import io.grpc.Status;
@@ -16,6 +19,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
+import java.util.Timer;
+import java.util.concurrent.TimeUnit;
 
 @GrpcService
 public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase {
@@ -55,6 +60,29 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
                     .withDescription(ex.getMessage())
                     .withCause(ex)
                     .asRuntimeException());
+        }
+    }
+
+    @Override
+    public void streamCourseCatalog(Empty request, StreamObserver<CourseSummary> responseObserver) {
+        try {
+            List<Course> allCourses = studentProfileService.getAllCourses();
+            allCourses.forEach(course -> {
+                CourseSummary courseSummary = CourseSummary.newBuilder().setCourseId(String.valueOf(course.getCourseId()))
+                        .setCourseName(nullToEmpty(course.getCourseName()))
+                        .setCourseCode(nullToEmpty(course.getCourseCode()))
+                        .setCredits(String.valueOf((int) course.getCredits()))
+                        .build();
+                try {
+                    TimeUnit.SECONDS.sleep(4);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                responseObserver.onNext(courseSummary);
+            });
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(e.fillInStackTrace());
         }
     }
 

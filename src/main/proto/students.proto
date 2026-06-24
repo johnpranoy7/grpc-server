@@ -2,6 +2,7 @@ syntax = "proto3";
 option java_multiple_files = true;
 package com.johnp.grpc;
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
 message StudentProfileRequest {
   float student_id = 1;
@@ -27,6 +28,14 @@ message EnrolledCourse {
   double grade = 5;
 }
 
+message CourseSummary {
+  string course_id = 1;
+  string course_name = 2;
+  string course_code = 3;
+  string credits = 4;
+}
+
 service StudentsService {
   rpc getStudentProfile (StudentProfileRequest) returns (StudentProfileResponse);
+  rpc streamCourseCatalog (google.protobuf.Empty) returns (stream CourseSummary);
 }
