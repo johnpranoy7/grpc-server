@@ -20,6 +20,22 @@ message StudentProfileResponse {
   repeated EnrolledCourse enrolled_courses = 9;
 }
 
+message StudentSummary {
+  int64 student_id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string program = 4;
+  double gpa = 5;
+}
+
+message StudentCatalogResponse {
+  repeated StudentSummary students = 1;
+}
+
+message CourseCatalogResponse {
+  repeated CourseSummary courses = 1;
+}
+
 message EnrolledCourse {
   int64 course_id = 1;
   string course_name = 2;
@@ -43,10 +59,18 @@ message StudentEnrollmentRequest {
   double grade = 6;
 }
 
+message FailedEnrollment {
+  int64 student_id = 1;
+  int64 course_id = 2;
+  string reason_code = 3;
+  string message = 4;
+}
+
 message BatchEnrollStudentsResponse {
   int32 success_count = 1;
   int32 failure_count = 2;
   repeated string failed_student_ids = 3;
+  repeated FailedEnrollment failures = 4;
 }
 
 message EnrollmentIntent {
@@ -68,6 +92,8 @@ message EnrollmentFeedback {
 
 service StudentsService {
   rpc getStudentProfile (StudentProfileRequest) returns (StudentProfileResponse);
+  rpc listStudentCatalog (google.protobuf.Empty) returns (StudentCatalogResponse);
+  rpc listCourseCatalog (google.protobuf.Empty) returns (CourseCatalogResponse);
   rpc streamCourseCatalog (google.protobuf.Empty) returns (stream CourseSummary);
   rpc batchConsumeEnrollStudents (stream StudentEnrollmentRequest) returns (BatchEnrollStudentsResponse);
   rpc liveEnrollmentAdvising (stream EnrollmentIntent) returns (stream EnrollmentFeedback);

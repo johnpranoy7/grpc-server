@@ -6,8 +6,9 @@ import com.johnp.grpc.*;
 import com.johnp.grpcserver.bean.Course;
 import com.johnp.grpcserver.bean.Enrollment;
 import com.johnp.grpcserver.bean.Student;
-import com.johnp.grpcserver.orchestrator.StudentDatabaseOrchestrator;
 import com.johnp.grpcserver.orchestrator.EnrollmentAdvisingResult;
+import com.johnp.grpcserver.orchestrator.EnrollmentRejectedException;
+import com.johnp.grpcserver.orchestrator.StudentDatabaseOrchestrator;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.log4j.Log4j;
@@ -68,6 +69,49 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
     }
 
     @Override
+    public void listStudentCatalog(Empty request, StreamObserver<StudentCatalogResponse> responseObserver) {
+        try {
+            StudentCatalogResponse.Builder builder = StudentCatalogResponse.newBuilder();
+            studentDatabaseOrchestrator.getAllStudents().forEach(student ->
+                    builder.addStudents(StudentSummary.newBuilder()
+                            .setStudentId(student.getStudentId())
+                            .setFirstName(nullToEmpty(student.getFirstName()))
+                            .setLastName(nullToEmpty(student.getLastName()))
+                            .setProgram(nullToEmpty(student.getProgram()))
+                            .setGpa(student.getGpa())
+                            .build()));
+            responseObserver.onNext(builder.build());
+            responseObserver.onCompleted();
+        } catch (Exception ex) {
+            responseObserver.onError(Status.INTERNAL
+                    .withDescription(ex.getMessage())
+                    .withCause(ex)
+                    .asRuntimeException());
+        }
+    }
+
+    @Override
+    public void listCourseCatalog(Empty request, StreamObserver<CourseCatalogResponse> responseObserver) {
+        try {
+            CourseCatalogResponse.Builder builder = CourseCatalogResponse.newBuilder();
+            studentDatabaseOrchestrator.getAllCourses().forEach(course ->
+                    builder.addCourses(CourseSummary.newBuilder()
+                            .setCourseId(course.getCourseId())
+                            .setCourseName(nullToEmpty(course.getCourseName()))
+                            .setCourseCode(nullToEmpty(course.getCourseCode()))
+                            .setCredits(String.valueOf(course.getCredits()))
+                            .build()));
+            responseObserver.onNext(builder.build());
+            responseObserver.onCompleted();
+        } catch (Exception ex) {
+            responseObserver.onError(Status.INTERNAL
+                    .withDescription(ex.getMessage())
+                    .withCause(ex)
+                    .asRuntimeException());
+        }
+    }
+
+    @Override
     public void streamCourseCatalog(Empty request, StreamObserver<CourseSummary> responseObserver) {
         try {
             List<Course> allCourses = studentDatabaseOrchestrator.getAllCourses();
@@ -78,7 +122,7 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
                         .setCredits(String.valueOf(course.getCredits()))
                         .build();
                 try {
-                    TimeUnit.SECONDS.sleep(4);
+                    TimeUnit.SECONDS.sleep(2);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -96,6 +140,7 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
         final int[] successCnt = {0};
         final int[] failedCnt = { 0 };
         ArrayList<String> failedRecordIds = new ArrayList<>();
+        ArrayList<FailedEnrollment> failures = new ArrayList<>();
 
         return new StreamObserver<StudentEnrollmentRequest>() {
             @Override
@@ -105,6 +150,19 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
                 try {
                     studentDatabaseOrchestrator.insertEnrollment(studentEnrollmentRequest);
                     successCnt[0]++;
+                } catch (EnrollmentRejectedException e) {
+                    log.warn("Rejected enrollment for studentId={}, courseId={}: {}",
+                            studentEnrollmentRequest.getStudentId(),
+                            studentEnrollmentRequest.getCourseId(),
+                            e.getMessage());
+                    failedCnt[0]++;
+                    failedRecordIds.add(studentEnrollmentRequest.getStudentId() + ":" + studentEnrollmentRequest.getCourseId());
+                    failures.add(FailedEnrollment.newBuilder()
+                            .setStudentId(studentEnrollmentRequest.getStudentId())
+                            .setCourseId(studentEnrollmentRequest.getCourseId())
+                            .setReasonCode(e.getReasonCode())
+                            .setMessage(e.getMessage())
+                            .build());
                 } catch (Exception e) {
                     log.warn("Failed to insert enrollment for studentId={}, courseId={}: {}",
                             studentEnrollmentRequest.getStudentId(),
@@ -112,6 +170,12 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
                             e.getMessage());
                     failedCnt[0]++;
                     failedRecordIds.add(studentEnrollmentRequest.getStudentId() + ":" + studentEnrollmentRequest.getCourseId());
+                    failures.add(FailedEnrollment.newBuilder()
+                            .setStudentId(studentEnrollmentRequest.getStudentId())
+                            .setCourseId(studentEnrollmentRequest.getCourseId())
+                            .setReasonCode("ERROR")
+                            .setMessage(e.getMessage() != null ? e.getMessage() : "Unknown error")
+                            .build());
                 }
             }
 
@@ -127,6 +191,7 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
                         .setSuccessCount(successCnt[0])
                         .setFailureCount(failedCnt[0])
                         .addAllFailedStudentIds(failedRecordIds)
+                        .addAllFailures(failures)
                         .build();
                 log.info("Batch enrollment finished: success={}, failed={}", successCnt[0], failedCnt[0]);
                 responseObserver.onNext(response);

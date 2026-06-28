@@ -1,7 +1,7 @@
 package com.johnp.grpcserver.orchestrator;
 
-import com.johnp.grpc.StudentEnrollmentRequest;
 import com.johnp.grpc.EnrollmentIntent;
+import com.johnp.grpc.StudentEnrollmentRequest;
 import com.johnp.grpcserver.bean.Course;
 import com.johnp.grpcserver.bean.Enrollment;
 import com.johnp.grpcserver.bean.Student;
@@ -42,25 +42,24 @@ public class StudentDatabaseOrchestrator {
         return courseRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
+    public List<Student> getAllStudents() {
+        return studentRepository.findAll();
+    }
+
     @Transactional
-    public void insertEnrollment(StudentEnrollmentRequest enrollmentRequest) throws Exception {
+    public void insertEnrollment(StudentEnrollmentRequest enrollmentRequest) throws EnrollmentRejectedException {
+        EnrollmentIntent intent = EnrollmentIntent.newBuilder()
+                .setStudentId(enrollmentRequest.getStudentId())
+                .setCourseId(enrollmentRequest.getCourseId())
+                .setTerm(enrollmentRequest.getTerm())
+                .setStatus(enrollmentRequest.getStatus())
+                .setGrade(enrollmentRequest.getGrade())
+                .build();
 
-        boolean isStudentPresent = studentRepository.findById(enrollmentRequest.getStudentId()).isPresent();
-        boolean isCoursePresent = courseRepository.findById(enrollmentRequest.getCourseId()).isPresent();
-
-        if (isStudentPresent && isCoursePresent) {
-            Student student = studentRepository.findById(enrollmentRequest.getStudentId()).get();
-            Course course = courseRepository.findById(enrollmentRequest.getCourseId()).get();
-
-            Enrollment enrollment = new Enrollment();
-            enrollment.setStudent(student);
-            enrollment.setCourse(course);
-            enrollment.setTerm(enrollmentRequest.getTerm());
-            enrollment.setStatus(enrollmentRequest.getStatus());
-            enrollment.setGrade(enrollmentRequest.getGrade());
-            enrollmentRepository.save(enrollment);
-        } else {
-            throw new Exception("Unable to enroll student in course");
+        EnrollmentAdvisingResult result = adviseEnrollment(intent);
+        if (!result.persisted()) {
+            throw new EnrollmentRejectedException(result.status(), result.message());
         }
     }
 
