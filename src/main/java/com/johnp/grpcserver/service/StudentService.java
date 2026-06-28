@@ -9,6 +9,7 @@ import com.johnp.grpcserver.bean.Student;
 import com.johnp.grpcserver.orchestrator.EnrollmentAdvisingResult;
 import com.johnp.grpcserver.orchestrator.EnrollmentRejectedException;
 import com.johnp.grpcserver.orchestrator.StudentDatabaseOrchestrator;
+import com.johnp.grpcserver.service.DemoEnrollmentResetService;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.log4j.Log4j;
@@ -32,6 +33,31 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
 
     @Autowired
     private StudentDatabaseOrchestrator studentDatabaseOrchestrator;
+
+    @Autowired
+    private DemoEnrollmentResetService demoEnrollmentResetService;
+
+    @Override
+    public void resetDemoEnrollments(Empty request, StreamObserver<DemoEnrollmentResetResponse> responseObserver) {
+        try {
+            int removed = demoEnrollmentResetService.resetDemoEnrollments();
+            String message = removed == 0
+                    ? "No demo enrollments to remove — database already at seed state."
+                    : "Removed " + removed + " demo enrollment(s); seed data preserved.";
+            DemoEnrollmentResetResponse response = DemoEnrollmentResetResponse.newBuilder()
+                    .setRemovedCount(removed)
+                    .setMessage(message)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        } catch (Exception ex) {
+            log.error("Failed to reset demo enrollments", ex);
+            responseObserver.onError(Status.INTERNAL
+                    .withDescription(ex.getMessage())
+                    .withCause(ex)
+                    .asRuntimeException());
+        }
+    }
 
     @Override
     public void getStudentProfile(StudentProfileRequest request, StreamObserver<StudentProfileResponse> responseObserver) {

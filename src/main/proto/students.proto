@@ -90,6 +90,11 @@ message EnrollmentFeedback {
   bool persisted = 6;
 }
 
+message DemoEnrollmentResetResponse {
+  int32 removed_count = 1;
+  string message = 2;
+}
+
 service StudentsService {
   rpc getStudentProfile (StudentProfileRequest) returns (StudentProfileResponse);
   rpc listStudentCatalog (google.protobuf.Empty) returns (StudentCatalogResponse);
@@ -97,4 +102,5 @@ service StudentsService {
   rpc streamCourseCatalog (google.protobuf.Empty) returns (stream CourseSummary);
   rpc batchConsumeEnrollStudents (stream StudentEnrollmentRequest) returns (BatchEnrollStudentsResponse);
   rpc liveEnrollmentAdvising (stream EnrollmentIntent) returns (stream EnrollmentFeedback);
+  rpc resetDemoEnrollments (google.protobuf.Empty) returns (DemoEnrollmentResetResponse);
 }
