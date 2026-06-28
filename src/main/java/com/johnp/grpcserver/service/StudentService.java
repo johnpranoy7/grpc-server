@@ -6,8 +6,13 @@ import com.johnp.grpc.*;
 import com.johnp.grpcserver.bean.Course;
 import com.johnp.grpcserver.bean.Enrollment;
 import com.johnp.grpcserver.bean.Student;
+import com.johnp.grpcserver.orchestrator.StudentDatabaseOrchestrator;
+import com.johnp.grpcserver.orchestrator.EnrollmentAdvisingResult;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import lombok.extern.log4j.Log4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.grpc.server.service.GrpcService;
 
@@ -18,16 +23,19 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+@Log4j
 @GrpcService
 public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase {
 
+    private static final Logger log = LoggerFactory.getLogger(StudentService.class);
+
     @Autowired
-    private StudentProfileService studentProfileService;
+    private StudentDatabaseOrchestrator studentDatabaseOrchestrator;
 
     @Override
     public void getStudentProfile(StudentProfileRequest request, StreamObserver<StudentProfileResponse> responseObserver) {
         try {
-            Student student = studentProfileService.findStudentWithEnrollments(request.getStudentId())
+            Student student = studentDatabaseOrchestrator.findStudentWithEnrollments(request.getStudentId())
                     .orElse(null);
 
             if (student == null) {
@@ -62,7 +70,7 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
     @Override
     public void streamCourseCatalog(Empty request, StreamObserver<CourseSummary> responseObserver) {
         try {
-            List<Course> allCourses = studentProfileService.getAllCourses();
+            List<Course> allCourses = studentDatabaseOrchestrator.getAllCourses();
             allCourses.forEach(course -> {
                 CourseSummary courseSummary = CourseSummary.newBuilder().setCourseId(course.getCourseId())
                         .setCourseName(nullToEmpty(course.getCourseName()))
@@ -92,16 +100,16 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
         return new StreamObserver<StudentEnrollmentRequest>() {
             @Override
             public void onNext(StudentEnrollmentRequest studentEnrollmentRequest) {
-                // Process each StudentEnrollmentRequest
-                System.out.println("Received enrollment request for student ID: " + studentEnrollmentRequest.getStudentId());
-                // Here you can add logic to save the enrollment request to the database or perform other operations
+                log.info("Received enrollment request for studentId={}, courseId={}",
+                        studentEnrollmentRequest.getStudentId(), studentEnrollmentRequest.getCourseId());
                 try {
-                    studentProfileService.insertEnrollment(studentEnrollmentRequest);
+                    studentDatabaseOrchestrator.insertEnrollment(studentEnrollmentRequest);
                     successCnt[0]++;
                 } catch (Exception e) {
-                    System.err.println("Error occurred while inserting enrollment for student "
-                            + studentEnrollmentRequest.getStudentId() + ", course "
-                            + studentEnrollmentRequest.getCourseId() + ": " + e.getMessage());
+                    log.warn("Failed to insert enrollment for studentId={}, courseId={}: {}",
+                            studentEnrollmentRequest.getStudentId(),
+                            studentEnrollmentRequest.getCourseId(),
+                            e.getMessage());
                     failedCnt[0]++;
                     failedRecordIds.add(studentEnrollmentRequest.getStudentId() + ":" + studentEnrollmentRequest.getCourseId());
                 }
@@ -109,7 +117,7 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
 
             @Override
             public void onError(Throwable throwable) {
-                System.err.println("Error occurred in batch enrollment stream: " + throwable.getMessage());
+                log.error("Error in batch enrollment stream", throwable);
                 responseObserver.onError(throwable);
             }
 
@@ -120,14 +128,59 @@ public class StudentService extends StudentsServiceGrpc.StudentsServiceImplBase 
                         .setFailureCount(failedCnt[0])
                         .addAllFailedStudentIds(failedRecordIds)
                         .build();
-                System.out.println("Batch enrollment finished. Success=" + successCnt[0]
-                        + ", Failed=" + failedCnt[0]);
+                log.info("Batch enrollment finished: success={}, failed={}", successCnt[0], failedCnt[0]);
                 responseObserver.onNext(response);
                 responseObserver.onCompleted();
             }
         };
     }
 
+    @Override
+    public StreamObserver<EnrollmentIntent> liveEnrollmentAdvising(
+            StreamObserver<EnrollmentFeedback> responseObserver) {
+        return new StreamObserver<EnrollmentIntent>() {
+            @Override
+            public void onNext(EnrollmentIntent intent) {
+                log.info("Advising intent received: studentId={}, courseId={}, term={}",
+                        intent.getStudentId(), intent.getCourseId(), intent.getTerm());
+                try {
+                    EnrollmentAdvisingResult result = studentDatabaseOrchestrator.adviseEnrollment(intent);
+                    EnrollmentFeedback feedback = EnrollmentFeedback.newBuilder()
+                            .setStudentId(intent.getStudentId())
+                            .setCourseId(intent.getCourseId())
+                            .setStatus(result.status())
+                            .setMessage(result.message())
+                            .setProjectedGpa(result.projectedGpa())
+                            .setPersisted(result.persisted())
+                            .build();
+                    log.info("Advising feedback: status={}, message={}", result.status(), result.message());
+                    responseObserver.onNext(feedback);
+                } catch (Exception ex) {
+                    log.error("Advising error for studentId={}, courseId={}",
+                            intent.getStudentId(), intent.getCourseId(), ex);
+                    responseObserver.onNext(EnrollmentFeedback.newBuilder()
+                            .setStudentId(intent.getStudentId())
+                            .setCourseId(intent.getCourseId())
+                            .setStatus("ERROR")
+                            .setMessage(ex.getMessage())
+                            .setPersisted(false)
+                            .build());
+                }
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                log.error("Client closed advising stream with error", throwable);
+                responseObserver.onError(throwable);
+            }
+
+            @Override
+            public void onCompleted() {
+                log.info("Advising session completed");
+                responseObserver.onCompleted();
+            }
+        };
+    }
 
 
     private List<EnrolledCourse> toEnrolledCourses(Student student) {
